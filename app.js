@@ -1,33 +1,56 @@
 import * as THREE from 'https://cdn.skypack.dev/three';
+import { GUI } from "https://cdn.skypack.dev/three/examples/jsm/libs/dat.gui.module"
 // import * as THREE from "three";
 
-const canvas = document.getElementById("webgl");
-
+const canvas = document.querySelector("canvas#webgl");
+// console.log(canvas);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera( 75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000 );
+scene.background = new THREE.Color(.5, .5, .5);
 
-const renderer = new THREE.WebGLRenderer(canvas);
-console.log(renderer.domElement);
-renderer.domElement = canvas;
-renderer.clearColor(1)
+const camera = new THREE.PerspectiveCamera( 75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000 );
+scene.add(camera);
+
+const renderer = new THREE.WebGLRenderer({canvas: canvas});
 renderer.setSize( canvas.clientWidth, canvas.clientHeight );
 
-const geometry = new THREE.BoxGeometry();
-const material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
+const geometry = new THREE.BoxGeometry(1,1,1,10,10,10);
+const material = new THREE.MeshStandardMaterial( { color: 0x00ff00 } );
 const cube = new THREE.Mesh( geometry, material );
-scene.add( cube );
+const wireFrame = new THREE.WireframeGeometry(geometry);
+const line = new THREE.LineSegments( wireFrame );
+console.log(geometry.toJSON());
+line.material.depthTest = false;
+line.material.opacity = 0.25;
+line.material.transparent = true;
+
+scene.add( line );
+// scene.add( cube );
+
+const pLight = new THREE.PointLight();
+pLight.position.z = 3;
+pLight.position.y = 3;
+
+scene.add(pLight);
 
 camera.position.z = 5;
 
-// const animate = function () {
-//     requestAnimationFrame( animate );
+const gui = new GUI()
+const cubeFolder = gui.addFolder('Cube')
+cubeFolder.add(line.rotation, 'x', 0, Math.PI * 2)
+cubeFolder.add(line.rotation, 'y', 0, Math.PI * 2)
+cubeFolder.add(line.rotation, 'z', 0, Math.PI * 2)
+cubeFolder.open()
+const cameraFolder = gui.addFolder('Camera')
+cameraFolder.add(camera.position, 'z', 0, 10)
+cameraFolder.open()
 
-//     cube.rotation.x += 0.01;
-//     cube.rotation.y += 0.01;
+const animate = function () {
+    requestAnimationFrame( animate );
 
-//     renderer.render( scene, camera );
-// };
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
 
-// animate();
-scene.background = new THREE.Color(1, 0, 0);
-renderer.render(scene, camera);
+    renderer.render( scene, camera );
+};
+
+animate();
