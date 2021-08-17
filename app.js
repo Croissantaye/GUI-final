@@ -7,14 +7,15 @@ import { FlyControls } from "https://cdn.skypack.dev/three/examples/jsm/controls
 
 const canvas = document.querySelector("canvas#webgl");
 
-const scale = 10;
-const segments = 20;
+const scale = 30;
+const segments = 30;
 const rotatePlane = true;
 
 const texLoad = new THREE.TextureLoader();
 const dirtTex = texLoad.load('./Ground_Dirt_007_basecolor.jpg');
 const mountainTex = texLoad.load('./Rock_040_basecolor.jpg');
 const snowTex = texLoad.load('./Snow_003_COLOR.jpg');
+const grassTex = texLoad.load('./grass_grass_0124_01_tiled_s.jpg')
 
 const shaders = {
 terrain: {
@@ -150,14 +151,15 @@ terrain: {
         uniform float uTime;
         uniform vec2 uResolution;
         uniform float uScale;
+        uniform float uSeed;
     
         void main(){
             vPosition = position;
             vColor = vec3(0.0);
             vNormal = normal;
             vUV = uv*uScale*.5;
-            // vUV.y += uTime/uScale;
-            vColor = vec3(layerNoise(20.0, .35, 2.5, vUV));
+            vUV.y += uTime;
+            vColor = vec3(layerNoise(20.0, .5, 2., vUV*uSeed));
             
             vPosition = vec3(position.xy, vColor.z);
     
@@ -175,12 +177,58 @@ terrain: {
         varying vec3 vColor;
         varying vec3 vNormal;
         varying vec2 vUV;
-    
+        
         uniform float uTime;
         uniform sampler2D lowTexture;
+        uniform sampler2D low2Texture;
         uniform sampler2D midTexture;
         uniform sampler2D highTexture;
-    
+
+        float inverseLerp(float a, float b, float v){
+            return (v-a)/(b-a);
+        }
+
+        vec4 lerp(vec4 a, vec4 b, float t){
+            return (1.0-t)*a+b*t;
+        }
+        
+        vec4 CalcTerrainColor(float height, vec2 fragCoord){
+            vec4 color = vec4(1.0);
+            float mountainStart = .005;
+            float mountainEnd = .1;
+            float snowStart = .4;
+            float snowEnd = .55;
+            height +=.015;
+
+            vec4 tex0 = texture(lowTexture, fragCoord);
+            vec4 tex_1 = texture(low2Texture, fragCoord);
+            vec4 tex1 = texture(midTexture, fragCoord);
+            vec4 tex2 = texture(highTexture, fragCoord);
+
+            color = tex0;
+            // if(height > )
+            if(height > .001 && height < mountainStart){
+                float mixValue = inverseLerp(0., mountainStart, height);
+                color = mix(tex0, tex_1,  mixValue);
+            }
+            else if(height > mountainStart && height < mountainEnd){
+                float mixValue = inverseLerp(mountainStart, mountainEnd, height);
+                color = mix(tex_1, tex1,  mixValue);
+            }
+            else if(height > mountainEnd && height < snowStart){
+                color = tex1;
+            }
+            else if(height > snowStart && height < snowEnd){
+                float mixValue = inverseLerp(snowStart, snowEnd, height);
+                color = mix(tex1, tex2,  mixValue);
+            }
+            else if(height > snowEnd){
+                color = tex2;
+            }
+
+            return color;
+        }
+
         void main(){
             vec3 fragColor = vColor;
             vec2 fragCoord = fract(vUV*5.);
@@ -189,15 +237,16 @@ terrain: {
             // fragColor = vec3(fragCoord, 0.0);
     
             vec4 tex = vec4(fragColor, 1.0);
-            if(vPosition.z < .1){
-                tex = texture(lowTexture, fragCoord);
-            }
-            else if(vPosition.z <= .5){
-                tex = texture(midTexture, fragCoord);
-            }
-            else if(vPosition.z > .5){
-                tex = texture(highTexture, fragCoord);
-            }
+            // if(vPosition.z < .1){
+            //     tex = texture(lowTexture, fragCoord);
+            // }
+            // else if(vPosition.z <= .5){
+            //     tex = texture(midTexture, fragCoord);
+            // }
+            // else if(vPosition.z > .5){
+            //     tex = texture(highTexture, fragCoord);
+            // }
+            tex = CalcTerrainColor(vPosition.z, fragCoord);
     
             gl_FragColor = tex;
         }`,
@@ -205,7 +254,9 @@ terrain: {
             uTime: { value: 0 },
             uResolution: { value: { x: canvas.clientWidth, y: canvas.clientHeight } },
             uScale: { value: scale },
+            uSeed: {value: (Math.random()*.5)+.5 },
             lowTexture: { value: dirtTex },
+            low2Texture: { value: grassTex },
             midTexture: { value: mountainTex },
             highTexture: { value: snowTex },
         }
@@ -222,8 +273,10 @@ terrain: {
     }
 }
 
+console.log(shaders.terrain.uniforms.uSeed.value);
+
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(.5, .5, .5);
+scene.background = new THREE.Color(82/256, 137/256, 227/256);
 
 const camera = new THREE.PerspectiveCamera( 45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000 );
 scene.add(camera);
@@ -234,7 +287,7 @@ renderer.setSize( canvas.clientWidth, canvas.clientHeight );
 
 const geometry = new THREE.PlaneGeometry(scale, scale, scale * segments, scale * segments);
 const waterPlane = new THREE.PlaneGeometry(scale, scale);
-const waterMat = new THREE.MeshStandardMaterial( { color: 0x0000ff } );
+const waterMat = new THREE.MeshStandardMaterial( { color: 0x5289e3 } );
 const material = new THREE.ShaderMaterial({ 
     uniforms: shaders.terrain.uniforms,
     vertexShader: shaders.terrain.vertexShader,
@@ -243,7 +296,7 @@ const material = new THREE.ShaderMaterial({
 });
 geometry.setAttribute('position', geometry.getAttribute('position'));
 geometry.setAttribute('normal', geometry.getAttribute('normal'));
-console.log(geometry.getAttribute('position'));
+// console.log(geometry.getAttribute('position'));
 const cube = new THREE.InstancedMesh( geometry, material, 2 );
 const worldMatrix = (pos) => {
     const position = pos
@@ -258,11 +311,11 @@ const worldMatrix = (pos) => {
     return matrix;
 }
 // let matrix = new THREE.Matrix4();
-let matrix = worldMatrix(new THREE.Vector3(scale, 0, 0));
-console.log(matrix);
-let newMat = new THREE.Matrix4();
-cube.getMatrixAt(0, newMat);
-console.log(newMat);
+// let matrix = worldMatrix(new THREE.Vector3(scale, 0, 0));
+// console.log(matrix);
+// let newMat = new THREE.Matrix4();
+// cube.getMatrixAt(0, newMat);
+// console.log(newMat);
 const water = new THREE.Mesh( waterPlane, waterMat );
 if(rotatePlane === true){
     cube.rotation.x = -90 * (3.14159/180);
@@ -280,12 +333,15 @@ scene.add( cube );
 scene.add(water);
 
 const pLight = new THREE.PointLight();
-pLight.position.z = 3;
-pLight.position.y = 3;
+// pLight.position.z = 3;
+pLight.position.y = 20;
+const rectLight = new THREE.RectAreaLight({ color: 0x5289e3, intensity: 1000, width: scale, height: scale });
+rectLight.position.set(0, 10, 0);
+rectLight.lookAt(0, 0, 0);
 
 scene.add(pLight);
 
-camera.position.z = 5;
+camera.position.z = scale/2;
 camera.position.y = 1;
 camera.lookAt(new THREE.Vector3(0, -1.25, 0));
 
@@ -303,8 +359,8 @@ cameraFolder.open()
 
 const clock = new THREE.Clock();
 
-const orbControls = new OrbitControls(camera, renderer.domElement);
-orbControls.update();
+// const orbControls = new OrbitControls(camera, renderer.domElement);
+// orbControls.update();
 // let flyControls = new FlyControls(camera, renderer.domElement);
 // flyControls.movementSpeed = 100;
 
